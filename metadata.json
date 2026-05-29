@@ -1,0 +1,6 @@
+{
+  "name": "Pelaporan Kegiatan Pegawai",
+  "description": "Aplikasi pelaporan kegiatan harian pegawai KPU yang terintegrasi dengan Google Sheets menggunakan Google Apps Script, lengkap dengan visualisasi produktivitas real-time dan ekspor rekapitulasi data.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
