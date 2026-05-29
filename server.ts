@@ -103,9 +103,9 @@ let db = {
   users: [...SEED_USERS],
   laporan: [...SEED_LAPORAN],
   config: {
-    appsScriptUrl: '',
-    spreadsheetId: '',
-    isConnected: false,
+    appsScriptUrl: process.env.APPS_SCRIPT_URL || '',
+    spreadsheetId: process.env.SPREADSHEET_ID || '',
+    isConnected: !!process.env.APPS_SCRIPT_URL,
     lastSyncError: '',
     lastSyncTime: ''
   }
@@ -134,6 +134,16 @@ if (fs.existsSync(DB_FILE)) {
   } catch (err) {
     console.error('Failed to write initial db.json:', err);
   }
+}
+
+// Override or supplement with environment variables if present (especially important for Vercel/Render serverless limits)
+if (process.env.APPS_SCRIPT_URL) {
+  db.config.appsScriptUrl = process.env.APPS_SCRIPT_URL;
+  db.config.isConnected = true;
+  console.log('Using Apps Script URL from env variable:', process.env.APPS_SCRIPT_URL);
+}
+if (process.env.SPREADSHEET_ID) {
+  db.config.spreadsheetId = process.env.SPREADSHEET_ID;
 }
 
 function saveDb() {
@@ -331,10 +341,39 @@ async function startServer() {
   });
 
   // Auth/Login Route
-  app.post('/api/login', (req, res) => {
+  app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) {
       return res.status(400).json({ error: 'Username dan password wajib diisi' });
+    }
+
+    // Dynamic sync/fetch of users if appsScriptUrl is present so that in serverless
+    // or cold-start environments we immediately can read the actual registered users from Google Sheet
+    if (db.config.appsScriptUrl) {
+      try {
+        const url = `${db.config.appsScriptUrl}?action=get_users`;
+        console.log('[LOGIN SYNC] Fetching remote users from Apps Script for verification:', url);
+        const response = await fetch(url);
+        if (response.ok) {
+          const remoteUsers = await response.json();
+          if (Array.isArray(remoteUsers) && remoteUsers.length > 0) {
+            const normalized = remoteUsers.map((u: any) => ({
+              ID: u.ID || u.id || '',
+              Username: u.Username || u.username || '',
+              Password: String(u.Password || u.password || 'demo123'),
+              Nama: u.Nama || u.nama || '',
+              Jabatan: u.Jabatan || u.jabatan || '',
+              Subbagian: u.Subbagian || u.subbagian || '',
+              Role: u.Role || u.role || 'pegawai'
+            }));
+            db.users = normalized;
+            saveDb();
+            console.log('[LOGIN SYNC] Users database synchronized successfully at login attempt');
+          }
+        }
+      } catch (err) {
+        console.error('[LOGIN SYNC] Background user sync failed during login, falling back to local database copy:', err);
+      }
     }
 
     const matched = db.users.find(
