@@ -83,12 +83,20 @@ const SEED_LAPORAN = [
 ];
 
 // Local file DB setup for persistence
-const DATA_DIR = path.join(process.cwd(), 'data');
+// Serverless environments like Vercel/Render have a read-only filesystem, but /tmp is writable.
+let DATA_DIR = path.join(process.cwd(), 'data');
+if (process.env.VERCEL || process.env.NOW_BUILDER || process.env.NODE_ENV === 'production' || process.env.RENDER) {
+  DATA_DIR = '/tmp';
+}
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 
-// Ensure directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+// Ensure directory exists with fail-safe try-catch
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+} catch (err) {
+  console.warn('Warning: Failed to create database directory, falling back to in-memory mode:', err);
 }
 
 let db = {
@@ -103,7 +111,7 @@ let db = {
   }
 };
 
-// Try loading db from file
+// Try loading db from file with fail-safe try-catch
 if (fs.existsSync(DB_FILE)) {
   try {
     const fileContent = fs.readFileSync(DB_FILE, 'utf8');
@@ -113,7 +121,7 @@ if (fs.existsSync(DB_FILE)) {
       // Safeguard missing config properties
       db.config.lastSyncError = db.config.lastSyncError || '';
       db.config.lastSyncTime = db.config.lastSyncTime || '';
-      console.log('Database loaded successfully from local file');
+      console.log('Database loaded successfully from file:', DB_FILE);
     }
   } catch (err) {
     console.error('Failed to parse db.json, using seed data:', err);
@@ -122,8 +130,9 @@ if (fs.existsSync(DB_FILE)) {
   // Save seed data as initial file
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf8');
+    console.log('Initial database file created successfully:', DB_FILE);
   } catch (err) {
-    console.error('Failed to write db.json:', err);
+    console.error('Failed to write initial db.json:', err);
   }
 }
 
